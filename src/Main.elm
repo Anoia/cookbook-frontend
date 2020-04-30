@@ -35,21 +35,20 @@ type alias Recipe =
 
 
 type alias Model =
-    { count : Int
-    , status : ViewStatus
+    { status : ViewStatus
     , recipes : List Recipe
     }
 
 
 init : Int -> ( Model, Cmd Msg )
-init x =
+init _ =
     let
         initialRecipes =
             [ { name = "recipe1", ingredients = "ingr1, ingr2", instructions = "some instructions go here" }
             , { name = "recipe2", ingredients = "ingr5, ingr7", instructions = "some other instructions go here" }
             ]
     in
-    ( { count = x, recipes = initialRecipes, status = ListRecipesView }, Cmd.none )
+    ( { recipes = initialRecipes, status = ListRecipesView }, Cmd.none )
 
 
 
@@ -57,9 +56,7 @@ init x =
 
 
 type Msg
-    = Increment
-    | Decrement
-    | ShowEditCreateRecipe (Maybe ( Int, Recipe ))
+    = ShowEditCreateRecipe (Maybe ( Int, Recipe ))
     | ShowList
     | ShowSingle Int Recipe
     | AddRecipe (Maybe Int) Recipe
@@ -95,12 +92,6 @@ update msg model =
 updateNoCmd : Msg -> Model -> Model
 updateNoCmd msg model =
     case msg of
-        Increment ->
-            { model | count = model.count + 1 }
-
-        Decrement ->
-            { model | count = model.count - 1 }
-
         ShowEditCreateRecipe maybeRecipe ->
             { model | status = EditRecipeView (getRecipeOrEmpty maybeRecipe) }
 
@@ -158,13 +149,7 @@ applyChangeToRecipe recipe recipeUpdate =
 view : Model -> Html Msg
 view model =
     div []
-        [ div []
-            [ button [ onClick Decrement ] [ text "minus" ]
-            , div [] [ text (String.fromInt model.count) ]
-            , button [ onClick Increment ] [ text "plus" ]
-            ]
-        , div [] [ currentRecipeView model ]
-        ]
+        [ currentRecipeView model ]
 
 
 currentRecipeView : Model -> Html Msg
