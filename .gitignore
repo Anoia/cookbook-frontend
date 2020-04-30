@@ -5,6 +5,7 @@ repl-temp-*
 
 out/
 
+elm.js
 
 # User-specific stuff
 .idea/**/workspace.xml
