@@ -1,10 +1,10 @@
 module Cookbook exposing (..)
 
 import Browser
-import Bulma.Elements exposing (TableRow, TitleSize(..), table, tableBody, tableCell, tableCellHead, tableFoot, tableHead, tableModifiers, tableRow, title)
+import Bulma.Elements exposing (TableRow, TitleSize(..), content, table, tableBody, tableCell, tableCellHead, tableFoot, tableHead, tableModifiers, tableRow, title)
 import Bulma.Layout exposing (SectionSpacing(..), container, hero, heroBody, heroModifiers, section)
-import Bulma.Modifiers exposing (Color(..))
-import Html exposing (Html, div, text)
+import Bulma.Modifiers exposing (Color(..), Size(..))
+import Html exposing (Html, div, p, text, ul)
 import Html.Events exposing (onClick)
 import Http
 import Json.Decode exposing (Decoder, field, int, list, map3, map5, string)
@@ -69,11 +69,28 @@ recipeListDecoder =
 init : Int -> ( Model, Cmd Msg )
 init _ =
     ( Loading
-    , Http.get
-        { url = "http://localhost:8080/recipes"
+    , apiGetAllRecipes
+    )
+
+
+baseUrl =
+    "http://localhost:8080/recipes"
+
+
+apiGetAllRecipes : Cmd Msg
+apiGetAllRecipes =
+    Http.get
+        { url = baseUrl
         , expect = Http.expectJson LoadedAllRecipes recipeListDecoder
         }
-    )
+
+
+apiGetSingeRecipe : Int -> Cmd Msg
+apiGetSingeRecipe id =
+    Http.get
+        { url = baseUrl ++ "/" ++ String.fromInt id
+        , expect = Http.expectJson LoadedSingleRecipe recipeDecoder
+        }
 
 
 
@@ -83,6 +100,7 @@ init _ =
 type Msg
     = LoadedAllRecipes (Result Http.Error (List RecipeOverview))
     | RecipeSelected Int
+    | AllRecipesSelected
     | LoadedSingleRecipe (Result Http.Error Recipe)
 
 
@@ -97,10 +115,12 @@ update msg model =
 
         RecipeSelected int ->
             ( model
-            , Http.get
-                { url = "http://localhost:8080/recipes/" ++ String.fromInt int
-                , expect = Http.expectJson LoadedSingleRecipe recipeDecoder
-                }
+            , apiGetSingeRecipe int
+            )
+
+        AllRecipesSelected ->
+            ( model
+            , apiGetAllRecipes
             )
 
         LoadedSingleRecipe (Ok recipe) ->
@@ -144,6 +164,7 @@ recipeTable recipes =
         ]
 
 
+recipeHeader : Bulma.Layout.Hero msg
 recipeHeader =
     hero { heroModifiers | color = Primary }
         []
@@ -159,13 +180,36 @@ recipeHeader =
 viewInPage : List (Html msg) -> Html msg
 viewInPage content =
     container []
-        [ section NotSpaced
-            []
-            [ recipeHeader ]
+        [ recipeHeader
         , section NotSpaced
             []
             content
         ]
+
+
+listElement : String -> Html msg
+listElement i =
+    Html.li [] [ text i ]
+
+
+viewRecipeContent : Recipe -> Html Msg
+viewRecipeContent recipe =
+    content Standard
+        []
+        [ title H1 [] [ text recipe.name ]
+        , p [] [ text recipe.description ]
+        , title H4 [] [ text "Ingredients" ]
+        , ul []
+            (List.map listElement recipe.ingredients)
+        , title H4 [] [ text "Instructions" ]
+        , p [] [ text recipe.instructions ]
+        ]
+
+
+viewRecipe recipe =
+    [ section NotSpaced [] [ viewRecipeContent recipe ]
+    , section NotSpaced [] [ Bulma.Elements.button Bulma.Elements.buttonModifiers [ onClick AllRecipesSelected ] [ text "back" ] ]
+    ]
 
 
 view : Model -> Html Msg
@@ -181,7 +225,7 @@ view model =
             viewInPage [ text "failed: ", text e ]
 
         ViewSingleRecipe recipe ->
-            viewInPage [ text "selected: ", text recipe.name ]
+            viewInPage (viewRecipe recipe)
 
 
 httpErrorString : Http.Error -> String
