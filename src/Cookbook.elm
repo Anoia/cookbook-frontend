@@ -5,8 +5,9 @@ import Bulma.Elements exposing (TableRow, TitleSize(..), table, tableBody, table
 import Bulma.Layout exposing (SectionSpacing(..), container, hero, heroBody, heroModifiers, section)
 import Bulma.Modifiers exposing (Color(..))
 import Html exposing (Html, div, text)
+import Html.Events exposing (onClick)
 import Http
-import Json.Decode exposing (Decoder, field, int, list, map3, string)
+import Json.Decode exposing (Decoder, field, int, list, map3, map5, string)
 
 
 
@@ -31,10 +32,25 @@ type alias RecipeOverview =
     { id : Int, name : String, description : String }
 
 
+type alias Recipe =
+    { id : Int, name : String, description : String, ingredients : List String, instructions : String }
+
+
 type Model
     = Loading
     | Failure String
     | ViewAllRecipes (List RecipeOverview)
+    | ViewSingleRecipe Recipe
+
+
+recipeDecoder : Decoder Recipe
+recipeDecoder =
+    map5 Recipe
+        (field "id" int)
+        (field "name" string)
+        (field "description" string)
+        (field "ingredients" (list string))
+        (field "instructions" string)
 
 
 recipeOverviewDecoder : Decoder RecipeOverview
@@ -66,6 +82,8 @@ init _ =
 
 type Msg
     = LoadedAllRecipes (Result Http.Error (List RecipeOverview))
+    | RecipeSelected Int
+    | LoadedSingleRecipe (Result Http.Error Recipe)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -75,6 +93,20 @@ update msg model =
             ViewAllRecipes value |> noCmd
 
         LoadedAllRecipes (Err error) ->
+            Failure (httpErrorString error) |> noCmd
+
+        RecipeSelected int ->
+            ( model
+            , Http.get
+                { url = "http://localhost:8080/recipes/" ++ String.fromInt int
+                , expect = Http.expectJson LoadedSingleRecipe recipeDecoder
+                }
+            )
+
+        LoadedSingleRecipe (Ok recipe) ->
+            ViewSingleRecipe recipe |> noCmd
+
+        LoadedSingleRecipe (Err error) ->
             Failure (httpErrorString error) |> noCmd
 
 
@@ -87,16 +119,16 @@ noCmd model =
 -- VIEW
 
 
-createRecipeRow : RecipeOverview -> TableRow msg
+createRecipeRow : RecipeOverview -> TableRow Msg
 createRecipeRow recipe =
     tableRow False
-        []
+        [ onClick (RecipeSelected recipe.id) ]
         [ tableCell [] [ text recipe.name ]
         , tableCell [] [ text recipe.description ]
         ]
 
 
-recipeTable : List RecipeOverview -> Bulma.Elements.Table msg
+recipeTable : List RecipeOverview -> Bulma.Elements.Table Msg
 recipeTable recipes =
     table { tableModifiers | striped = True }
         []
@@ -124,15 +156,15 @@ recipeHeader =
         ]
 
 
-recipeOverview : List RecipeOverview -> Html Msg
-recipeOverview recipes =
+viewInPage : List (Html msg) -> Html msg
+viewInPage content =
     container []
         [ section NotSpaced
             []
             [ recipeHeader ]
         , section NotSpaced
             []
-            [ recipeTable recipes ]
+            content
         ]
 
 
@@ -140,15 +172,16 @@ view : Model -> Html Msg
 view model =
     case model of
         Loading ->
-            section NotSpaced
-                []
-                [ container [] [ text "loading.." ] ]
+            viewInPage [ text "loading.." ]
 
         ViewAllRecipes recipes ->
-            recipeOverview recipes
+            viewInPage [ recipeTable recipes ]
 
         Failure e ->
-            div [] [ text "failed: ", text e ]
+            viewInPage [ text "failed: ", text e ]
+
+        ViewSingleRecipe recipe ->
+            viewInPage [ text "selected: ", text recipe.name ]
 
 
 httpErrorString : Http.Error -> String
