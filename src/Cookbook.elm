@@ -1,13 +1,17 @@
 module Cookbook exposing (..)
 
 import Browser
-import Bulma.Elements exposing (TableRow, TitleSize(..), content, table, tableBody, tableCell, tableCellHead, tableFoot, tableHead, tableModifiers, tableRow, title)
+import Bulma.Elements exposing (TableRow, TitleSize(..), button, content, table, tableBody, tableCell, tableCellHead, tableFoot, tableHead, tableModifiers, tableRow, title)
+import Bulma.Form exposing (control, controlHelp, controlInput, controlInputModifiers, controlLabel, controlText, controlTextArea, controlTextAreaModifiers, field, fields, multilineFields)
 import Bulma.Layout exposing (SectionSpacing(..), container, hero, heroBody, heroModifiers, section)
 import Bulma.Modifiers exposing (Color(..), Size(..))
-import Html exposing (Html, div, p, text, ul)
-import Html.Events exposing (onClick)
+import Debug exposing (toString)
+import Html exposing (Html, li, p, text, ul)
+import Html.Attributes exposing (placeholder, type_)
+import Html.Events exposing (onClick, onInput)
 import Http
-import Json.Decode exposing (Decoder, field, int, list, map3, map5, string)
+import Recipe exposing (NewRecipe, Recipe, RecipeOverview)
+import RecipeApi exposing (RecipeApiResultMsg(..), getAllRecipes, getSingeRecipe, httpErrorString)
 
 
 
@@ -28,84 +32,73 @@ main =
 -- Model
 
 
-type alias RecipeOverview =
-    { id : Int, name : String, description : String }
-
-
-type alias Recipe =
-    { id : Int, name : String, description : String, ingredients : List String, instructions : String }
-
-
 type Model
     = Loading
     | Failure String
     | ViewAllRecipes (List RecipeOverview)
     | ViewSingleRecipe Recipe
-
-
-recipeDecoder : Decoder Recipe
-recipeDecoder =
-    map5 Recipe
-        (field "id" int)
-        (field "name" string)
-        (field "description" string)
-        (field "ingredients" (list string))
-        (field "instructions" string)
-
-
-recipeOverviewDecoder : Decoder RecipeOverview
-recipeOverviewDecoder =
-    map3 RecipeOverview
-        (field "id" int)
-        (field "name" string)
-        (field "description" string)
-
-
-recipeListDecoder : Decoder (List RecipeOverview)
-recipeListDecoder =
-    list recipeOverviewDecoder
+    | CreateNewRecipe NewRecipe
 
 
 init : Int -> ( Model, Cmd Msg )
 init _ =
     ( Loading
-    , apiGetAllRecipes
+    , Cmd.map ApiResult getAllRecipes
     )
-
-
-baseUrl =
-    "http://localhost:8080/recipes"
-
-
-apiGetAllRecipes : Cmd Msg
-apiGetAllRecipes =
-    Http.get
-        { url = baseUrl
-        , expect = Http.expectJson LoadedAllRecipes recipeListDecoder
-        }
-
-
-apiGetSingeRecipe : Int -> Cmd Msg
-apiGetSingeRecipe id =
-    Http.get
-        { url = baseUrl ++ "/" ++ String.fromInt id
-        , expect = Http.expectJson LoadedSingleRecipe recipeDecoder
-        }
 
 
 
 -- Update
 
 
+type CreateAction
+    = UpdateName String
+    | UpdateDescription String
+    | UpdateInstructions String
+    | UpdateNewIngredient String
+    | AddIngredient String
+    | RemoveIngredient String
+    | SubmitNewRecipe
+
+
 type Msg
-    = LoadedAllRecipes (Result Http.Error (List RecipeOverview))
-    | RecipeSelected Int
+    = RecipeSelected Int
     | AllRecipesSelected
-    | LoadedSingleRecipe (Result Http.Error Recipe)
+    | CreateNewRecipeSelected
+    | ApiResult RecipeApiResultMsg
+    | CreateRecipeMsg CreateAction
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    case msg of
+        RecipeSelected int ->
+            ( model
+            , Cmd.map ApiResult (getSingeRecipe int)
+            )
+
+        AllRecipesSelected ->
+            ( model
+            , Cmd.map ApiResult getAllRecipes
+            )
+
+        ApiResult r ->
+            handleApiResult r model
+
+        CreateNewRecipeSelected ->
+            CreateNewRecipe Recipe.emptyNewRecipe |> noCmd
+
+        CreateRecipeMsg createAction ->
+            case model of
+                CreateNewRecipe newRecipe ->
+                    handleCreateMsg newRecipe createAction
+
+                _ ->
+                    Failure "received createAction without matching model state" |> noCmd
+
+
+handleApiResult : RecipeApiResultMsg -> Model -> ( Model, Cmd Msg )
+handleApiResult msg model =
     case msg of
         LoadedAllRecipes (Ok value) ->
             ViewAllRecipes value |> noCmd
@@ -113,21 +106,42 @@ update msg model =
         LoadedAllRecipes (Err error) ->
             Failure (httpErrorString error) |> noCmd
 
-        RecipeSelected int ->
-            ( model
-            , apiGetSingeRecipe int
-            )
-
-        AllRecipesSelected ->
-            ( model
-            , apiGetAllRecipes
-            )
-
         LoadedSingleRecipe (Ok recipe) ->
             ViewSingleRecipe recipe |> noCmd
 
         LoadedSingleRecipe (Err error) ->
             Failure (httpErrorString error) |> noCmd
+
+        SubmittedNewRecipe (Ok recipe) ->
+            ViewSingleRecipe recipe |> noCmd
+
+        SubmittedNewRecipe (Err error) ->
+            Failure (httpErrorString error) |> noCmd
+
+
+handleCreateMsg : NewRecipe -> CreateAction -> ( Model, Cmd Msg )
+handleCreateMsg newRecipe createAction =
+    case createAction of
+        UpdateName string ->
+            CreateNewRecipe { newRecipe | name = string } |> noCmd
+
+        UpdateDescription string ->
+            CreateNewRecipe { newRecipe | description = string } |> noCmd
+
+        UpdateInstructions string ->
+            CreateNewRecipe { newRecipe | instructions = string } |> noCmd
+
+        AddIngredient string ->
+            CreateNewRecipe { newRecipe | ingredients = string :: newRecipe.ingredients, newIngredient = "" } |> noCmd
+
+        RemoveIngredient string ->
+            CreateNewRecipe { newRecipe | ingredients = List.filter (\a -> a /= string) newRecipe.ingredients } |> noCmd
+
+        UpdateNewIngredient string ->
+            CreateNewRecipe { newRecipe | newIngredient = string } |> noCmd
+
+        SubmitNewRecipe ->
+            ( CreateNewRecipe newRecipe, Cmd.map ApiResult (RecipeApi.submitNewRecipe newRecipe) )
 
 
 noCmd : Model -> ( Model, Cmd Msg )
@@ -206,10 +220,83 @@ viewRecipeContent recipe =
         ]
 
 
+createButton m t =
+    Bulma.Elements.button Bulma.Elements.buttonModifiers [ onClick m ] [ text t ]
+
+
+backToAllRecipesButton =
+    createButton AllRecipesSelected "Back"
+
+
+sectionedContentList : List (Html msg) -> List (Html msg)
+sectionedContentList contentList =
+    List.map (\a -> section NotSpaced [] [ a ]) contentList
+
+
 viewRecipe recipe =
-    [ section NotSpaced [] [ viewRecipeContent recipe ]
-    , section NotSpaced [] [ Bulma.Elements.button Bulma.Elements.buttonModifiers [ onClick AllRecipesSelected ] [ text "back" ] ]
-    ]
+    sectionedContentList [ viewRecipeContent recipe, backToAllRecipesButton ]
+
+
+displayIngredientList : List String -> Html Msg
+displayIngredientList ingredients =
+    ul [] (List.map displayIngredient ingredients)
+
+
+displayIngredient : String -> Html Msg
+displayIngredient ingredient =
+    li [ onClick (CreateRecipeMsg (RemoveIngredient ingredient)) ] [ text ingredient ]
+
+
+
+-- add remove button
+
+
+createIngredientThingy : List String -> String -> Html Msg
+createIngredientThingy ingredients newIngredient =
+    field []
+        [ controlLabel [] [ text "Ingredients: " ]
+        , Bulma.Form.connectedFields Bulma.Modifiers.Centered
+            []
+            [ controlText { controlInputModifiers | expanded = True } [] [ onInput (\a -> CreateRecipeMsg (UpdateNewIngredient a)), placeholder "New ingredient", Html.Attributes.value newIngredient ] []
+            , control Bulma.Form.controlModifiers
+                []
+                [ button Bulma.Elements.buttonModifiers [ onClick (CreateRecipeMsg (AddIngredient newIngredient)) ] [ text "+" ]
+                ]
+            ]
+        , displayIngredientList ingredients
+        ]
+
+
+createRecipeForm : NewRecipe -> Html Msg
+createRecipeForm recipe =
+    container []
+        [ field []
+            [ controlLabel [] [ text ("Recipe Name: " ++ recipe.name) ]
+            , controlText controlInputModifiers [] [ onInput (\a -> CreateRecipeMsg (UpdateName a)), placeholder "Name", Html.Attributes.value recipe.name ] []
+            , controlHelp Default [] []
+            ]
+        , field []
+            [ controlLabel [] [ text ("Recipe Description: " ++ recipe.description) ]
+            , controlText controlInputModifiers [] [ onInput (\a -> CreateRecipeMsg (UpdateDescription a)), placeholder "Description", Html.Attributes.value recipe.description ] []
+            , controlHelp Default [] []
+            ]
+        , createIngredientThingy recipe.ingredients recipe.newIngredient
+        , field []
+            [ controlLabel [] [ text ("Recipe Instructions: " ++ recipe.instructions) ]
+            , controlTextArea controlTextAreaModifiers [] [ onInput (\a -> CreateRecipeMsg (UpdateInstructions a)), placeholder "Instructions", Html.Attributes.value recipe.instructions ] []
+            , controlHelp Default [] []
+            ]
+        ]
+
+
+viewCreateRecipePage : NewRecipe -> List (Html Msg)
+viewCreateRecipePage recipe =
+    sectionedContentList
+        [ title H1 [] [ text "Create new recipe" ]
+        , createRecipeForm recipe
+        , p [] [ text (Recipe.testRecipeEncoder recipe) ]
+        , fields Bulma.Modifiers.Left [] [ backToAllRecipesButton, createButton (CreateRecipeMsg SubmitNewRecipe) "Create" ]
+        ]
 
 
 view : Model -> Html Msg
@@ -219,7 +306,13 @@ view model =
             viewInPage [ text "loading.." ]
 
         ViewAllRecipes recipes ->
-            viewInPage [ recipeTable recipes ]
+            viewInPage
+                (sectionedContentList
+                    [ title H1 [] [ text "All recipes" ]
+                    , recipeTable recipes
+                    , createButton CreateNewRecipeSelected "create new"
+                    ]
+                )
 
         Failure e ->
             viewInPage [ text "failed: ", text e ]
@@ -227,24 +320,8 @@ view model =
         ViewSingleRecipe recipe ->
             viewInPage (viewRecipe recipe)
 
-
-httpErrorString : Http.Error -> String
-httpErrorString error =
-    case error of
-        Http.BadUrl string ->
-            "bad url: " ++ string
-
-        Http.Timeout ->
-            "timeout"
-
-        Http.NetworkError ->
-            "network error"
-
-        Http.BadStatus int ->
-            "Bad status: " ++ String.fromInt int
-
-        Http.BadBody string ->
-            "Bad body: " ++ string
+        CreateNewRecipe recipe ->
+            viewInPage (viewCreateRecipePage recipe)
 
 
 
