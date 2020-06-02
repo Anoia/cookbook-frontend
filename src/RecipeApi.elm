@@ -5,7 +5,7 @@ import Recipe exposing (NewRecipe, Recipe, RecipeOverview, recipeDecoder, recipe
 
 
 baseUrl =
-    "http://localhost:8080/recipes"
+    "http://localhost:8080/recipe"
 
 
 type RecipeApiResultMsg
