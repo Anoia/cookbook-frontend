@@ -2,14 +2,12 @@ module Cookbook exposing (..)
 
 import Browser
 import Bulma.Elements exposing (TableRow, TitleSize(..), button, content, table, tableBody, tableCell, tableCellHead, tableFoot, tableHead, tableModifiers, tableRow, title)
-import Bulma.Form exposing (control, controlHelp, controlInput, controlInputModifiers, controlLabel, controlText, controlTextArea, controlTextAreaModifiers, field, fields, multilineFields)
+import Bulma.Form exposing (control, controlHelp, controlInputModifiers, controlLabel, controlText, controlTextArea, controlTextAreaModifiers, field, fields)
 import Bulma.Layout exposing (SectionSpacing(..), container, hero, heroBody, heroModifiers, section)
 import Bulma.Modifiers exposing (Color(..), Size(..))
-import Debug exposing (toString)
 import Html exposing (Html, li, p, text, ul)
-import Html.Attributes exposing (placeholder, type_)
+import Html.Attributes exposing (placeholder)
 import Html.Events exposing (onClick, onInput)
-import Http
 import Recipe exposing (NewRecipe, Recipe, RecipeOverview)
 import RecipeApi exposing (RecipeApiResultMsg(..), getAllRecipes, getSingeRecipe, httpErrorString)
 
@@ -18,9 +16,9 @@ import RecipeApi exposing (RecipeApiResultMsg(..), getAllRecipes, getSingeRecipe
 -- MAIN
 
 
-main : Program Int Model Msg
+main : Program () Model Msg
 main =
-    Browser.element
+    Browser.document
         { init = init
         , view = view
         , update = update
@@ -40,7 +38,7 @@ type Model
     | CreateNewRecipe NewRecipe
 
 
-init : Int -> ( Model, Cmd Msg )
+init : () -> ( Model, Cmd Msg )
 init _ =
     ( Loading
     , Cmd.map ApiResult getAllRecipes
@@ -299,8 +297,8 @@ viewCreateRecipePage recipe =
         ]
 
 
-view : Model -> Html Msg
-view model =
+viewBody : Model -> Html Msg
+viewBody model =
     case model of
         Loading ->
             viewInPage [ text "loading.." ]
@@ -322,6 +320,11 @@ view model =
 
         CreateNewRecipe recipe ->
             viewInPage (viewCreateRecipePage recipe)
+
+
+view : Model -> Browser.Document Msg
+view model =
+    { title = "The cookbook title", body = [ viewBody model ] }
 
 
 
