@@ -41,22 +41,3 @@ submitNewRecipe newRecipe =
         , body = Http.jsonBody (Recipe.newRecipeEncoder newRecipe)
         , expect = Http.expectJson SubmittedNewRecipe recipeDecoder
         }
-
-
-httpErrorString : Http.Error -> String
-httpErrorString error =
-    case error of
-        Http.BadUrl string ->
-            "bad url: " ++ string
-
-        Http.Timeout ->
-            "timeout"
-
-        Http.NetworkError ->
-            "network error"
-
-        Http.BadStatus int ->
-            "Bad status: " ++ String.fromInt int
-
-        Http.BadBody string ->
-            "Bad body: " ++ string

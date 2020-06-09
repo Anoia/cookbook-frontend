@@ -1,15 +1,20 @@
 module Cookbook exposing (..)
 
-import Browser
+import ApiHelper exposing (httpErrorString)
+import Browser exposing (UrlRequest)
+import Browser.Navigation as Nav
 import Bulma.Elements exposing (TableRow, TitleSize(..), button, content, table, tableBody, tableCell, tableCellHead, tableFoot, tableHead, tableModifiers, tableRow, title)
 import Bulma.Form exposing (control, controlHelp, controlInputModifiers, controlLabel, controlText, controlTextArea, controlTextAreaModifiers, field, fields)
 import Bulma.Layout exposing (SectionSpacing(..), container, hero, heroBody, heroModifiers, section)
 import Bulma.Modifiers exposing (Color(..), Size(..))
+import FoodStuff exposing (FoodStuffOverview, Ingredient, foodStuffListDecoder)
 import Html exposing (Html, li, p, text, ul)
 import Html.Attributes exposing (placeholder)
 import Html.Events exposing (onClick, onInput)
+import Http
 import Recipe exposing (NewRecipe, Recipe, RecipeOverview)
-import RecipeApi exposing (RecipeApiResultMsg(..), getAllRecipes, getSingeRecipe, httpErrorString)
+import RecipeApi exposing (RecipeApiResultMsg(..), getAllRecipes, getSingeRecipe)
+import Url exposing (Url)
 
 
 
@@ -18,11 +23,13 @@ import RecipeApi exposing (RecipeApiResultMsg(..), getAllRecipes, getSingeRecipe
 
 main : Program () Model Msg
 main =
-    Browser.document
+    Browser.application
         { init = init
         , view = view
         , update = update
         , subscriptions = subscriptions
+        , onUrlRequest = LinkClicked
+        , onUrlChange = UrlChanged
         }
 
 
@@ -30,18 +37,34 @@ main =
 -- Model
 
 
-type Model
+type Session
+    = Guest Nav.Key
+    | LoggedIn Nav.Key String
+
+
+type ModelState
     = Loading
     | Failure String
     | ViewAllRecipes (List RecipeOverview)
     | ViewSingleRecipe Recipe
     | CreateNewRecipe NewRecipe
+    | FoodStuffPage FoodStuff.Model
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    ( Loading
-    , Cmd.map ApiResult getAllRecipes
+type alias Model =
+    { state : ModelState
+    , key : Nav.Key
+    , url : Url.Url
+    }
+
+
+init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
+init _ url key =
+    ( Model (FoodStuffPage FoodStuff.Loading) key url
+    , Http.get
+        { url = "http://localhost:8080/foodstuff"
+        , expect = Http.expectJson (\a -> FoodStuffMsg (FoodStuff.CompletedLoadFoodstuffList a)) foodStuffListDecoder
+        }
     )
 
 
@@ -64,7 +87,17 @@ type Msg
     | AllRecipesSelected
     | CreateNewRecipeSelected
     | ApiResult RecipeApiResultMsg
+    | FoodStuffMsg FoodStuff.Msg
     | CreateRecipeMsg CreateAction
+    | LinkClicked Browser.UrlRequest
+    | UrlChanged Url.Url
+
+
+updateModelStateWith : (subModel -> ModelState) -> (subMsg -> Msg) -> Model -> ( subModel, Cmd subMsg ) -> ( Model, Cmd Msg )
+updateModelStateWith toModel toMsg model ( subModel, subCmd ) =
+    ( { model | state = toModel subModel }
+    , Cmd.map toMsg subCmd
+    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -81,43 +114,63 @@ update msg model =
             )
 
         ApiResult r ->
-            handleApiResult r model
+            { model | state = handleApiResult r } |> noCmd
 
         CreateNewRecipeSelected ->
-            CreateNewRecipe Recipe.emptyNewRecipe |> noCmd
+            { model | state = CreateNewRecipe Recipe.emptyNewRecipe } |> noCmd
 
         CreateRecipeMsg createAction ->
-            case model of
+            case model.state of
                 CreateNewRecipe newRecipe ->
-                    handleCreateMsg newRecipe createAction
+                    let
+                        newm =
+                            handleCreateMsg newRecipe createAction
+                    in
+                    ( { model | state = Tuple.first newm }, Tuple.second newm )
 
                 _ ->
-                    Failure "received createAction without matching model state" |> noCmd
+                    { model | state = Failure "received createAction without matching model state" } |> noCmd
+
+        LinkClicked urlRequest ->
+            -- TODO
+            model |> noCmd
+
+        UrlChanged url ->
+            -- TODO
+            model |> noCmd
+
+        FoodStuffMsg m ->
+            case model.state of
+                FoodStuffPage fm ->
+                    FoodStuff.update m fm |> updateModelStateWith FoodStuffPage FoodStuffMsg model
+
+                _ ->
+                    { model | state = Failure "received foodstuff msg without matching model state" } |> noCmd
 
 
-handleApiResult : RecipeApiResultMsg -> Model -> ( Model, Cmd Msg )
-handleApiResult msg model =
+handleApiResult : RecipeApiResultMsg -> ModelState
+handleApiResult msg =
     case msg of
         LoadedAllRecipes (Ok value) ->
-            ViewAllRecipes value |> noCmd
+            ViewAllRecipes value
 
         LoadedAllRecipes (Err error) ->
-            Failure (httpErrorString error) |> noCmd
+            Failure (httpErrorString error)
 
         LoadedSingleRecipe (Ok recipe) ->
-            ViewSingleRecipe recipe |> noCmd
+            ViewSingleRecipe recipe
 
         LoadedSingleRecipe (Err error) ->
-            Failure (httpErrorString error) |> noCmd
+            Failure (httpErrorString error)
 
         SubmittedNewRecipe (Ok recipe) ->
-            ViewSingleRecipe recipe |> noCmd
+            ViewSingleRecipe recipe
 
         SubmittedNewRecipe (Err error) ->
-            Failure (httpErrorString error) |> noCmd
+            Failure (httpErrorString error)
 
 
-handleCreateMsg : NewRecipe -> CreateAction -> ( Model, Cmd Msg )
+handleCreateMsg : NewRecipe -> CreateAction -> ( ModelState, Cmd Msg )
 handleCreateMsg newRecipe createAction =
     case createAction of
         UpdateName string ->
@@ -142,7 +195,7 @@ handleCreateMsg newRecipe createAction =
             ( CreateNewRecipe newRecipe, Cmd.map ApiResult (RecipeApi.submitNewRecipe newRecipe) )
 
 
-noCmd : Model -> ( Model, Cmd Msg )
+noCmd : m -> ( m, Cmd Msg )
 noCmd model =
     ( model, Cmd.none )
 
@@ -199,9 +252,9 @@ viewInPage content =
         ]
 
 
-listElement : String -> Html msg
+listElement : Ingredient -> Html msg
 listElement i =
-    Html.li [] [ text i ]
+    Html.li [] [ text (String.fromInt i.amount ++ " " ++ i.name) ]
 
 
 viewRecipeContent : Recipe -> Html Msg
@@ -297,7 +350,7 @@ viewCreateRecipePage recipe =
         ]
 
 
-viewBody : Model -> Html Msg
+viewBody : ModelState -> Html Msg
 viewBody model =
     case model of
         Loading ->
@@ -321,10 +374,13 @@ viewBody model =
         CreateNewRecipe recipe ->
             viewInPage (viewCreateRecipePage recipe)
 
+        FoodStuffPage m ->
+            Html.map FoodStuffMsg (viewInPage [ FoodStuff.view m ])
+
 
 view : Model -> Browser.Document Msg
 view model =
-    { title = "The cookbook title", body = [ viewBody model ] }
+    { title = "The cookbook title", body = [ viewBody model.state ] }
 
 
 

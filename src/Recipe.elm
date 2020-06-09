@@ -1,5 +1,6 @@
 module Recipe exposing (..)
 
+import FoodStuff exposing (Ingredient)
 import Json.Decode exposing (Decoder, field, int, list, map3, map5, string)
 import Json.Encode as Encode
 
@@ -9,7 +10,7 @@ type alias RecipeOverview =
 
 
 type alias Recipe =
-    { id : Int, name : String, description : String, ingredients : List String, instructions : String }
+    { id : Int, name : String, description : String, ingredients : List Ingredient, instructions : String }
 
 
 type alias NewRecipe =
@@ -42,7 +43,7 @@ recipeDecoder =
         (field "id" int)
         (field "name" string)
         (field "description" string)
-        (field "ingredients" (list string))
+        (field "ingredients" FoodStuff.ingredientListDecoder)
         (field "instructions" string)
 
 
