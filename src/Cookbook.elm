@@ -7,11 +7,12 @@ import Bulma.Elements exposing (TableRow, TitleSize(..), button, content, table,
 import Bulma.Form exposing (control, controlHelp, controlInputModifiers, controlLabel, controlText, controlTextArea, controlTextAreaModifiers, field, fields)
 import Bulma.Layout exposing (SectionSpacing(..), container, hero, heroBody, heroModifiers, section)
 import Bulma.Modifiers exposing (Color(..), Size(..))
-import FoodStuff exposing (FoodStuffOverview, Ingredient, foodStuffListDecoder)
+import FoodStuff exposing (FoodStuffOverview, foodStuffListDecoder)
 import Html exposing (Html, li, p, text, ul)
 import Html.Attributes exposing (placeholder)
 import Html.Events exposing (onClick, onInput)
 import Http
+import Ingredient exposing (Ingredient)
 import Recipe exposing (NewRecipe, Recipe, RecipeOverview)
 import RecipeApi exposing (RecipeApiResultMsg(..), getAllRecipes, getSingeRecipe)
 import Url exposing (Url)

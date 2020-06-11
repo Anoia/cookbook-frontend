@@ -1,6 +1,6 @@
 module Recipe exposing (..)
 
-import FoodStuff exposing (Ingredient)
+import Ingredient exposing (Ingredient, ingredientListDecoder)
 import Json.Decode exposing (Decoder, field, int, list, map3, map5, string)
 import Json.Encode as Encode
 
@@ -43,7 +43,7 @@ recipeDecoder =
         (field "id" int)
         (field "name" string)
         (field "description" string)
-        (field "ingredients" FoodStuff.ingredientListDecoder)
+        (field "ingredients" ingredientListDecoder)
         (field "instructions" string)
 
 

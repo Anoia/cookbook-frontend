@@ -12,10 +12,6 @@ type alias FoodStuffOverview =
     { id : Int, name : String }
 
 
-type alias Ingredient =
-    { id : Int, name : String, amount : Int }
-
-
 foodStuffDecoder : Decoder FoodStuffOverview
 foodStuffDecoder =
     map2 FoodStuffOverview
@@ -26,19 +22,6 @@ foodStuffDecoder =
 foodStuffListDecoder : Decoder (List FoodStuffOverview)
 foodStuffListDecoder =
     list foodStuffDecoder
-
-
-ingredientDecoder : Decoder Ingredient
-ingredientDecoder =
-    map3 Ingredient
-        (field "foodStuffId" int)
-        (field "name" string)
-        (field "amount" int)
-
-
-ingredientListDecoder : Decoder (List Ingredient)
-ingredientListDecoder =
-    list ingredientDecoder
 
 
 type Model
